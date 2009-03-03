@@ -12,34 +12,36 @@
 # Copyright:: Copyright (c) 2009 Daniel Jackoway
 # License::   Distributes under the MIT License (see COPYING file)
 
-class String
-  def split_sentences
-    gsub(/([\.\?!] *)([A-Z])/, "\\1\n\\2")
+require 'tempfile'
+
+
+class SentDiff
+  def self.split_sentences(str)
+    str.gsub(/([\.\?!] *)([A-Z])/, "\\1\n\\2")
   end
-end
 
-class Array
-  def rand_val
-    self[rand(self.length)]
+  def file_with_split_sentences(old)
+    contents = self.class.split_sentences(File.read(old))
+    tmpfile  = Tempfile.new(old, '.')
+    File.open(tmpfile.path, "w") { |file| file.write(contents) }
+    tmpfile
   end
-end
 
-def random_chars(num = 1)
-  rand_chars = [*('a' .. 'z')] + [*('0' .. '9')]
-  (0 ... num).inject("") { |s,_| s + rand_chars.rand_val }
-end
+  def initialize(src, dst, options=[])
+    tmp   = [src, dst].collect { |f| file_with_split_sentences(f) }
+    paths = tmp.map { |t| t.path }
+    @diff = `diff #{options * " "} #{paths * " "}`
+    tmp.each { |f| f.close! }
+  end
 
-def file_with_split_sentences(old)
-  contents = File.read(old).split_sentences
-  begin newname = "#{old}-sdiff-#{random_chars 5}"; end while File.exists?(newname)
-  File.open(newname, "w") { |file| file.write contents.join("\n")}
-  newname
+  def to_s
+    @diff
+  end
 end
 
 
 if $0 == __FILE__
-  fnames = ARGV[-2..-1].collect { |f| file_with_split_sentences f }
-  system "diff #{ARGV[0...-2].join " "} #{fnames.join " "}"
-  #`rm #{fnames.join " "}`
+  diff = SentDiff.new(ARGV[-2], ARGV[-1], ARGV[0 ... -2])
+  puts diff
 end
 
